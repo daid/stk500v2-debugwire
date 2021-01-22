@@ -30,7 +30,7 @@ static uint16_t message_body_index;
 static uint8_t message_sequence_number;
 static uint8_t message_checksum;
 static bool message_corrupt;
-
+static uint32_t load_address;
 
 static void processMessage()
 {
@@ -70,6 +70,7 @@ static void processMessage()
         message_body[message_body_index++] = 0; //OK
         break;
     case 0x06: //CMD_LOAD_ADDRESS
+        load_address = (uint32_t(message_body[1]) << 24) | (uint32_t(message_body[2]) << 16) | (uint32_t(message_body[3]) << 8) | (uint32_t(message_body[4]) << 0);
         message_body[message_body_index++] = 0; //OK
         break;
     case 0x10: //CMD_ENTER_PROGMODE_ISP
@@ -77,8 +78,31 @@ static void processMessage()
             message_body[message_body_index++] = 0; //OK
         break;
     case 0x11: //CMD_LEAVE_PROGMODE_ISP
-        dwExit();
-        message_body[message_body_index++] = 0; //OK
+        if (dwExit())
+            message_body[message_body_index++] = 0; //OK
+        break;
+    case 0x12: //CMD_CHIP_ERASE_ISP
+        if (dwChipErase())
+            message_body[message_body_index++] = 0; //OK
+        break;
+    case 0x13: //CMD_PROGRAM_FLASH_ISP
+        if (dwWriteFlash(load_address, &message_body[10], (message_body[1] << 8) | (message_body[2])))
+            message_body[message_body_index++] = 0; //OK
+        break;
+    case 0x14: //CMD_READ_FLASH_ISP
+        message_size = (message_body[1] << 8) | (message_body[2]);
+        if (dwReadFlash(load_address, &message_body[message_body_index + 1], message_size))
+        {
+            message_body[message_body_index++] = 0; //OK
+            message_body_index += message_size;
+            message_body[message_body_index++] = 0; //OK
+        }
+        break;
+    case 0x15: //CMD_PROGRAM_EEPROM_ISP
+        break;
+    case 0x16: //CMD_READ_EEPROM_ISP
+        break;
+    case 0x17: //CMD_PROGRAM_FUSE_ISP
         break;
     case 0x1D: //CMD_SPI_MULTI
         if (message_body[1] == 0x04 && message_body[2] == 0x04 && message_body[3] == 0x00)

@@ -28,10 +28,12 @@ IO_OUTPUT(B3);
 
 void msuBreak(uint8_t ms)
 {
+IO_WRITE(B3, 1);
     LOW();
     while(ms--)
         _delay_ms(1);
     HIGH();
+IO_WRITE(B3, 0);
 }
 
 void msuSend(uint8_t data)
@@ -52,6 +54,24 @@ IO_WRITE(B3, !IO_READ(B3));
     HIGH();
 IO_WRITE(B3, !IO_READ(B3));
     TCNT1 = 0; while(TCNT1 < bit_delay) {}
+}
+
+bool msuWaitForBreak()
+{
+    uint16_t timeout = 0;
+    while(READ()) {
+        timeout++;
+        if (timeout == 0) return false;
+        _delay_us(100);
+    }
+    while(!READ())
+    {
+        timeout++;
+        if (timeout == 0)
+            return false;
+        _delay_us(100);
+    }
+    return true;
 }
 
 int msuRecv()
@@ -86,31 +106,27 @@ uint16_t msuCalibrate()
     //Expect a 0x55 byte, at an unknown baudrate.
     //Wait for the start bit
     TCNT1 = 0;
-    while(READ())
-    {
-        if (TCNT1 > 0xF000)
-            return 0;   //timeout
-    }
+    while(READ()) { if (TCNT1 > 0xF000) return 0; }
     TCNT1 = 0;
     //At the start bit, wait for first bit (which is low)
-    while(!READ()) {}
+    while(!READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 0, wait for bit 1
-    while(READ()) {}
+    while(READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 1, wait for bit 2
-    while(!READ()) {}
+    while(!READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 2, wait for bit 3
-    while(READ()) {}
+    while(READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 3, wait for bit 4
-    while(!READ()) {}
+    while(!READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 4, wait for bit 5
-    while(READ()) {}
+    while(READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 5, wait for bit 6
-    while(!READ()) {}
+    while(!READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 6, wait for bit 7
-    while(READ()) {}
+    while(READ()) { if (TCNT1 > 0xF000) return 0; }
     //In bit 7, wait for stop bit
-    while(!READ()) {}
-    //We are now in the stop bit.
+    while(!READ()) { if (TCNT1 > 0xF000) return 0; }
+    //We are now in the stop bit, which is the same as line idle, so no way to detect end of stop bit.
 
     //t1 is now the time between 9 bits.
     uint16_t t1 = TCNT1;

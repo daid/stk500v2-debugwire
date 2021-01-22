@@ -5,7 +5,12 @@
 
 void dwInit();
 bool dwEnter();
-void dwExit();
+bool dwExit();
+
 uint8_t dwReadFuse(uint8_t index);
+
+bool dwChipErase();
+bool dwReadFlash(uint32_t address, uint8_t* data, uint16_t size);
+bool dwWriteFlash(uint32_t address, const uint8_t* data, uint16_t size);
 
 #endif//CHIP_INFO_H
