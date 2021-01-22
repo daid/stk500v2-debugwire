@@ -23,7 +23,7 @@ void msuInit()
     TCCR1B = _BV(CS11);
     TCCR1C = 0x00;
 
-    IO_OUTPUT(B3);
+IO_OUTPUT(B3);
 }
 
 void msuBreak(uint8_t ms)

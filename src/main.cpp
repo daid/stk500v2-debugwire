@@ -1,7 +1,7 @@
 #include "gpio.h"
 #include "uart.h"
 #include "config.h"
-#include "monosoftuart.h"
+#include "debugwire.h"
 #include "chipinfo.h"
 
 #include <avr/io.h>
@@ -34,59 +34,92 @@ static bool message_corrupt;
 
 static void processMessage()
 {
+    uint8_t tmp;
     if (message_size < 1)
         return;
     message_body_index = 1;
     switch(message_body[0])
     {
     case 0x01: //CMD_SIGN_ON
-        message_body[message_body_index++] = 0;
+        message_body[message_body_index++] = 0; //OK
         message_body[message_body_index++] = 8;
         memcpy_P(&message_body[message_body_index], PSTR("STK500_2"), 8);
         message_body_index += 8;
         break;
     case 0x02: //CMD_SET_PARAMETER
-        message_body[message_body_index++] = 0;
+        message_body[message_body_index++] = 0; //OK
         break;
     case 0x03: //CMD_GET_PARAMETER
-        //TODO: Get different parameters, not sure if it's important
-        message_body[message_body_index++] = 0;
-        message_body[message_body_index++] = 0;
+        tmp = message_body[1];
+        message_body[message_body_index++] = 0; //OK
+        switch(tmp)
+        {
+        case 0x90: message_body[message_body_index++] = 0xFF; break; //PARAM_HW_VER
+        case 0x91: message_body[message_body_index++] = 0x01; break; //PARAM_SW_MAJOR
+        case 0x92: message_body[message_body_index++] = 0x00; break; //PARAM_SW_MINOR
+        case 0x94: message_body[message_body_index++] = 0x00; break; //PARAM_VTARGET
+        case 0x95: message_body[message_body_index++] = 0x00; break; //PARAM_VADJUST
+        case 0x96: message_body[message_body_index++] = 0x00; break; //PARAM_OSC_PSCALE
+        case 0x97: message_body[message_body_index++] = 0x00; break; //PARAM_OSC_CMATCH
+        case 0x98: message_body[message_body_index++] = 0x00; break; //PARAM_SCK_DURATION
+        case 0x9a: message_body[message_body_index++] = 0x00; break; //PARAM_TOPCARD_DETECT
+        default: message_body[message_body_index++] = 0x00; break;
+        }
         break;
     case 0x05: //CMD_OSCCAL
-        message_body[message_body_index++] = 0;
+        message_body[message_body_index++] = 0; //OK
         break;
     case 0x06: //CMD_LOAD_ADDRESS
-        message_body[message_body_index++] = 0;
+        message_body[message_body_index++] = 0; //OK
         break;
     case 0x10: //CMD_ENTER_PROGMODE_ISP
-        message_body[message_body_index++] = 0;
-        //TODO, reporting OK
+        if (dwEnter())
+            message_body[message_body_index++] = 0; //OK
         break;
     case 0x11: //CMD_LEAVE_PROGMODE_ISP
-        message_body[message_body_index++] = 0;
-        //TODO
+        dwExit();
+        message_body[message_body_index++] = 0; //OK
         break;
     case 0x1D: //CMD_SPI_MULTI
-        if (message_body[1] == 0x04 && message_body[2] == 0x04 && message_body[3] == 0x00 && message_body[4] == 0x30)
+        if (message_body[1] == 0x04 && message_body[2] == 0x04 && message_body[3] == 0x00)
         {
-            //Signature read.
-            message_body[message_body_index++] = 0;
+            tmp = message_body[4];
+            message_body[message_body_index++] = 0; //OK
             message_body[message_body_index++] = 0x00;
             message_body[message_body_index++] = 0x00;
             message_body[message_body_index++] = 0x00;
-            switch(message_body[6])
+            if (tmp == 0x30)
             {
-            case 0x00:
-                message_body[message_body_index++] = 0x1E;
-                break;
-            case 0x01:
-                message_body[message_body_index++] = 0x91;
-                break;
-            case 0x02:
-                message_body[message_body_index++] = 0x0A;
-                break;
-            default:
+                //Signature read.
+                switch(message_body[6])
+                {
+                case 0x00:
+                    message_body[message_body_index++] = 0x1E;
+                    break;
+                case 0x01:
+                    message_body[message_body_index++] = chip_info.signature >> 8;
+                    break;
+                case 0x02:
+                    message_body[message_body_index++] = chip_info.signature;
+                    break;
+                default:
+                    message_body[message_body_index++] = 0;
+                }
+            }
+            else if (tmp == 0x50 && message_body[5] == 0x00)
+            {   //Read low fuse bits
+                message_body[message_body_index++] = dwReadFuse(0);
+            }
+            else if (tmp == 0x58 && message_body[5] == 0x08)
+            {   //Read high fuse bits
+                message_body[message_body_index++] = dwReadFuse(1);
+            }
+            else if (tmp == 0x50 && message_body[5] == 0x08)
+            {   //Read extended fuse bits
+                message_body[message_body_index++] = dwReadFuse(2);
+            }
+            else
+            {
                 message_body[message_body_index++] = 0;
             }
         }
@@ -112,7 +145,7 @@ static void processMessage()
 int main()
 {
     uartInit();
-    msuInit();
+    dwInit();
     sei();
 
     IO_OUTPUT(B5);

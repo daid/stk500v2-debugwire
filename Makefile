@@ -27,7 +27,7 @@ SINCDIRS := \
 
 # Sources
 SRCS := \
-	main.cpp uart.cpp monosoftuart.cpp chipinfo.cpp
+	main.cpp uart.cpp monosoftuart.cpp chipinfo.cpp debugwire.cpp
 
 #- DON'T EDIT BELOW HERE UNLESS YOU KNOW WHAT YOU ARE GETTING YOURSELF INTO -#
 
