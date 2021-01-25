@@ -126,9 +126,10 @@ uint16_t msuCalibrate()
 
     //t1 is now the time between 9 bits.
     uint16_t t1 = TCNT1;
-    if (t1 >= 255 * 9)
-        return 0;
-    bit_delay = t1 / 9;
+    if (t1 >= 250 * 9)
+        bit_delay = 250;
+    else
+        bit_delay = t1 / 9;
 
     //Wait for the stop bit to finish.
     TCNT1 = 0; while(TCNT1 < bit_delay) {}

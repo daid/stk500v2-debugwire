@@ -8,6 +8,24 @@
 
 static uint8_t current_mode = 0;
 
+
+static bool dwSync()
+{
+    uint16_t bit_delay = msuCalibrate();
+    if (bit_delay == 0)
+        return false;
+    uint8_t speed_setting = 0x83;
+    while(bit_delay > 50 && speed_setting >= 0x80)
+    {
+        speed_setting -= 1;
+        msuSend(speed_setting);
+        bit_delay = msuCalibrate();
+        if (bit_delay == 0)
+            return false;
+    }
+    return true;
+}
+
 //Setup and execute an instruction
 static void dwInstr(uint16_t instr)
 {
@@ -37,7 +55,7 @@ static bool dwInstrSync(uint16_t instr)
 
     if (!msuWaitForBreak())
         return false;
-    if (msuCalibrate() == 0)
+    if (dwSync() == 0)
         return false;
     return true;
 }
@@ -82,9 +100,7 @@ void dwInit()
 bool dwEnter()
 {
     msuBreak(10);
-    uint16_t bit_delay = msuCalibrate();
-    if (bit_delay == 0)
-        return false;
+    dwSync();
     msuSend(0xF3);
     int sigHigh = msuRecv();
     if (sigHigh < 0)
