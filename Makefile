@@ -51,46 +51,22 @@ LDFLAGS  := $(LDFLAGS_BASE) $(LDFLAGS)
 SRCS := $(patsubst %.cpp,$(SRCDIR)/%.cpp,$(SRCS))
 OBJS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS := $(patsubst %.o,%.d,$(OBJS))
-BINS := $(BINDIR)/$(TARGET).bin
+ELFS := $(BINDIR)/$(TARGET).elf
 HEXS := $(BINDIR)/$(TARGET).hex
 
 .PHONY: clean
-.SECONDARY: $(OBJS) $(BINS)
+.SECONDARY: $(OBJS) $(ELFS)
 
 #-# General Goals
 
-all: check-tools $(HEXS)
+all: $(HEXS)
 
 upload: $(HEXS)
 	@$(AVRDUDE) -p$(MCU) -carduino -P$(AVRDUDE_PORT) -b57600 -Uflash:w:"$(HEXS)":i
 
 clean:
-	@$(foreach elem,$(OBJS),if [ -f $(elem) ]; then echo "RM $(elem)"; rm $(elem); fi)
-	@$(foreach elem,$(DEPS),if [ -f $(elem) ]; then echo "RM $(elem)"; rm $(elem); fi)
-	@$(foreach elem,$(BINS),if [ -f $(elem) ]; then echo "RM $(elem)"; rm $(elem); fi)
-	@$(foreach elem,$(HEXS),if [ -f $(elem) ]; then echo "RM $(elem)"; rm $(elem); fi)
-
-dist-clean: clean
-	@if [ -d $(OBJDIR) ]; then echo "RMDIR $(OBJDIR)"; rmdir $(OBJDIR); fi
-	@if [ -d $(BINDIR) ]; then echo "RMDIR $(BINDIR)"; rmdir $(BINDIR); fi
-	@if [ -f .tool-paths ]; then echo "RM .tool-paths"; rm .tool-paths; fi
-	@if [ -d .git -a -n "$(shell git clean -xdn)" ]; then echo "GIT CLEAN"; git clean -xdf &> /dev/null; fi
-
-#-# AVR Info Goals
-
-disasm: $(BINS)
-	@echo "DISASM $^"
-	@$(OBJDUMP) -d -S $^
-
-size: binsize hexsize
-
-binsize: $(BINS)
-	@echo "BINSIZE $^"
-	@$(AVRSIZE) -C --mcu=$(MCU) $^
-
-hexsize: $(HEXS)
-	@echo "HEXSIZE $^"
-	@echo "$(shell wc -c < $^) Bytes"
+	@rm -rf $(BINDIR)
+	@rm -rf $(OBJDIR)
 
 #-# File Pattern Goals
 
@@ -100,52 +76,20 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 
 -include $(OBJDIR)/*.d
 
-$(BINDIR)/%.bin: $(OBJS) | $(BINDIR)
+$(BINDIR)/%.elf: $(OBJS) | $(BINDIR)
 	@echo "LINK $@"
 	@$(COMPILE) $(LDFLAGS) -o $@ $^
+	@$(AVRSIZE) -C --mcu=$(MCU) $@
+	@$(OBJDUMP) -d -S $@ > $@.list
 
-$(BINDIR)/%.hex: $(BINS) | $(BINDIR)
+$(BINDIR)/%.hex: $(ELFS) | $(BINDIR)
 	@echo "OBJCOPY $@"
 	@$(OBJCOPY) -j .text -j .data -O ihex $^ $@
 
 #-# Directory Goals
 
 $(OBJDIR):
-	@echo "MKDIR $@"
 	@mkdir -p $@
 
 $(BINDIR):
-	@echo "MKDIR $@"
 	@mkdir -p $@
-
-#-# Toolchain Checking Goals
-
-check-tools: .tool-paths
-
-check-compiler:
-ifndef COMPILE
-	@$(error "No suitable compiler found!")
-endif
-
-check-linker: check-compiler
-
-check-objcopy:
-ifndef OBJCOPY
-	@$(error "No suitable objcopy found!")
-endif
-
-check-disasm:
-ifndef OBJDUMP
-	@$(error "No suitable disassembler found!")
-endif
-
-check-binsize:
-ifndef AVRSIZE
-	@$(error "No suitable size calculator found!")
-endif
-
-.tool-paths: | check-compiler check-linker check-objcopy check-disasm check-binsize
-	@echo "g++     : $(COMPILE)" | tee -a .tool-paths
-	@echo "objcopy : $(OBJCOPY)" | tee -a .tool-paths
-	@echo "objdump : $(OBJDUMP)" | tee -a .tool-paths
-	@echo "avrsize : $(AVRSIZE)" | tee -a .tool-paths

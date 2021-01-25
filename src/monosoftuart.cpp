@@ -12,8 +12,11 @@
 #define LOW() do { IO_WRITE(RST_PIN, 0); IO_OUTPUT(RST_PIN); } while(0)
 #define READ() IO_READ(RST_PIN)
 
+//Macro to forcefully unroll specific loops for speed
+#define BIT_LOOP(_M) do { _M(0); _M(1); _M(2); _M(3); _M(4); _M(5); _M(6); _M(7); } while(0)
 
-static uint16_t bit_delay = 0;
+
+static uint8_t bit_delay = 0;
 
 void msuInit()
 {
@@ -22,38 +25,32 @@ void msuInit()
     TCCR1A = 0x00;
     TCCR1B = _BV(CS11);
     TCCR1C = 0x00;
-
-IO_OUTPUT(B3);
 }
 
 void msuBreak(uint8_t ms)
 {
-IO_WRITE(B3, 1);
     LOW();
     while(ms--)
         _delay_ms(1);
     HIGH();
-IO_WRITE(B3, 0);
 }
 
 void msuSend(uint8_t data)
 {
+    uint8_t local_bit_delay = bit_delay;
     //Start bit
-IO_WRITE(B3, !IO_READ(B3));
     LOW();
-    TCNT1 = 0; while(TCNT1 < bit_delay) {}
+    TCNT1 = 0; while(TCNT1L < local_bit_delay) {}
     //Data
-    for(uint8_t n=0; n<8; n++)
-    {
-        if (data & _BV(n)) HIGH(); else LOW();
-IO_WRITE(B3, !IO_READ(B3));
-        TCNT1 = 0; while(TCNT1 < bit_delay) {}
-    }
+#define M(n) \
+    if (data & _BV(n)) HIGH(); else LOW(); \
+    TCNT1L = 0; while(TCNT1L < bit_delay) {}
+    BIT_LOOP(M);
+#undef M
 
     //Stop bit
     HIGH();
-IO_WRITE(B3, !IO_READ(B3));
-    TCNT1 = 0; while(TCNT1 < bit_delay) {}
+    TCNT1 = 0; while(TCNT1L < local_bit_delay) {}
 }
 
 bool msuWaitForBreak()
@@ -62,20 +59,21 @@ bool msuWaitForBreak()
     while(READ()) {
         timeout++;
         if (timeout == 0) return false;
-        _delay_us(100);
+        _delay_us(50);
     }
     while(!READ())
     {
         timeout++;
         if (timeout == 0)
             return false;
-        _delay_us(100);
+        _delay_us(50);
     }
     return true;
 }
 
 int msuRecv()
 {
+    uint8_t local_bit_delay = bit_delay;
     //Wait for start bit
     TCNT1 = 0;
     while(READ())
@@ -84,17 +82,15 @@ int msuRecv()
             return -1; //timeout
     }
     TCNT1 = 0;
-    while(TCNT1 < bit_delay) {}
+    while(TCNT1L < local_bit_delay) {}
     TCNT1 = 0;
-    while(TCNT1 < bit_delay / 2) {}
+    while(TCNT1L < local_bit_delay / 2) {}
     uint8_t result = 0;
-    for(uint8_t n=0; n<8; n++)
-    {
-IO_WRITE(B3, !IO_READ(B3));
-        if (READ()) result |= _BV(n);
-        TCNT1 = 0;
-        while(TCNT1 < bit_delay) {}
-    }
+#define M(n) \
+        if (READ()) result |= _BV(n); \
+        TCNT1L = 0; while(TCNT1L < local_bit_delay) {}
+    BIT_LOOP(M);
+#undef M
     // Check the stop bit.
     if (!READ())
         return -1;
@@ -130,6 +126,8 @@ uint16_t msuCalibrate()
 
     //t1 is now the time between 9 bits.
     uint16_t t1 = TCNT1;
+    if (t1 >= 255 * 9)
+        return 0;
     bit_delay = t1 / 9;
 
     //Wait for the stop bit to finish.

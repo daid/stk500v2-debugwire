@@ -178,7 +178,6 @@ bool dwWriteFlash(uint32_t address, const uint8_t* data, uint16_t size)
         size -= 2;
     }
     
-    _delay_ms(1);
     SET_Z(address * 2);
     LDI(16, _BV(0) | _BV(2));
     OUT(0x37, 16);
